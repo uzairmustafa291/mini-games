@@ -122,11 +122,12 @@ def draw_scoreboards(screen, fonts, scores, top):
             screen.blit(more, (panels[1].x + 20, panels[1].bottom - 32))
 
 
-def player_entry_screen(screen, background, clock, scores, fonts):
+def player_entry_screen(screen, background, clock, scores, played_roll_numbers, fonts):
     title_font, ui_font, input_font, panel_font, row_font = fonts
     roll_number = ""
     name = ""
     active_field = "roll_number"
+    entry_error = ""
 
     while True:
         for event in pygame.event.get():
@@ -141,7 +142,11 @@ def player_entry_screen(screen, background, clock, scores, fonts):
                     active_field = "name" if active_field == "roll_number" else "roll_number"
                 elif event.key == pygame.K_RETURN:
                     if roll_number.strip() and name.strip():
-                        return roll_number.strip(), name.strip()
+                        normalized_roll_number = roll_number.strip().casefold()
+                        if normalized_roll_number in played_roll_numbers:
+                            entry_error = "This roll number has already played."
+                        else:
+                            return roll_number.strip(), name.strip()
                 elif event.key == pygame.K_BACKSPACE:
                     if active_field == "roll_number":
                         roll_number = roll_number[:-1]
@@ -178,11 +183,14 @@ def player_entry_screen(screen, background, clock, scores, fonts):
             screen.blit(value_surface, (box.x + 14, box.y + 11))
 
         instruction = ui_font.render(
-            "Press Enter to play  |  Tab to switch fields  |  Esc to quit",
+            "One attempt per roll number  |  Tab to switch fields  |  Esc to quit",
             True,
             COLOR_PLAYER,
         )
         screen.blit(instruction, instruction.get_rect(center=(WIDTH // 2, 273)))
+        if entry_error:
+            error_surface = row_font.render(entry_error, True, (255, 145, 145))
+            screen.blit(error_surface, error_surface.get_rect(center=(WIDTH // 2, 298)))
         draw_scoreboards(screen, (panel_font, row_font), scores, 318)
         pygame.display.flip()
         clock.tick(FPS)
@@ -237,12 +245,18 @@ def main():
         pygame.quit()
         return
 
+    played_roll_numbers = {
+        score["roll_number"].strip().casefold()
+        for score in scores
+    }
+
     while True:
         roll_number, player_name = player_entry_screen(
             screen,
             background,
             clock,
             scores,
+            played_roll_numbers,
             entry_fonts,
         )
 
@@ -309,6 +323,7 @@ def main():
             clock.tick(FPS)
 
         session_high_score = max(session_high_score, final_survival_time)
+        played_roll_numbers.add(roll_number.strip().casefold())
         storage_error = None
         try:
             scores = record_score(
@@ -404,7 +419,7 @@ def main():
                     True,
                     COLOR_TEXT,
                 )
-                msg_hint = ui_font.render("Press Enter to play again", True, COLOR_PLAYER)
+                msg_hint = ui_font.render("Press Enter to return to player entry", True, COLOR_PLAYER)
                 
                 screen.blit(msg_main, msg_main.get_rect(center=(WIDTH // 2, 55)))
                 screen.blit(msg_sub, msg_sub.get_rect(center=(WIDTH // 2, 119)))
@@ -417,8 +432,12 @@ def main():
                     (255, 145, 145),
                 )
                 screen.blit(warning, warning.get_rect(center=(WIDTH // 2, 252)))
-            elif game_state == "CRASHED":
-                instruction = ui_font.render("Press Enter to play again", True, COLOR_TEXT)
+            else:
+                instruction = ui_font.render(
+                    "Each roll number may play only once. Press Enter to continue.",
+                    True,
+                    COLOR_TEXT,
+                )
                 screen.blit(instruction, instruction.get_rect(center=(WIDTH // 2, 258)))
 
             draw_scoreboards(screen, (panel_font, row_font), scores, 300)

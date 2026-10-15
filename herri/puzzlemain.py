@@ -114,12 +114,17 @@ class SlidingPuzzle:
         self.roll_number = ""
         self.player_name = ""
         self.active_field = "roll_number"
+        self.entry_error = ""
         self.storage_error = None
         try:
             self.scores = load_scores()
         except (OSError, ValueError) as error:
             self.scores = []
             self.storage_error = str(error)
+        self.played_roll_numbers = {
+            score["roll_number"].strip().casefold()
+            for score in self.scores
+        }
         self.game_state = "STORAGE_ERROR" if self.storage_error else "PLAYER_ENTRY"
         self.moves = 0
         self.start_ticks = 0
@@ -127,7 +132,6 @@ class SlidingPuzzle:
         self.score_saved = False
         self.result_won = False
         self.confetti = []
-        self.reset_button = pygame.Rect(PANEL_X + 95, PANEL_Y + 520, 200, 52)
         self.start_button = pygame.Rect(PANEL_X + 65, PANEL_Y + 485, 260, 58)
         self.results_button = pygame.Rect(SCREEN_WIDTH // 2 - 130, 145, 260, 52)
         self.shuffle_puzzle()
@@ -178,6 +182,7 @@ class SlidingPuzzle:
 
     def start_game(self):
         self.tense_channel.stop()
+        self.played_roll_numbers.add(self.roll_number.strip().casefold())
         self.shuffle_puzzle()
         self.start_ticks = pygame.time.get_ticks()
         self.score_saved = False
@@ -434,11 +439,14 @@ class SlidingPuzzle:
             self.screen.blit(text, (box.x + 13, box.y + 8))
 
         hint = self.small_font.render(
-            "Enter to continue | Tab to switch fields | Scores saved automatically",
+            "One attempt per roll number | Enter to continue | Tab to switch fields",
             True,
             COLOR_ACCENT,
         )
         self.screen.blit(hint, hint.get_rect(center=(SCREEN_WIDTH // 2, 203)))
+        if self.entry_error:
+            error = self.small_font.render(self.entry_error, True, COLOR_FAIL)
+            self.screen.blit(error, error.get_rect(center=(SCREEN_WIDTH // 2, 220)))
         self.draw_scoreboards(top=232)
 
     def draw_results_screen(self):
@@ -505,11 +513,11 @@ class SlidingPuzzle:
         elif self.game_state == "WON":
             timer = self.font.render("PICTURE RESTORED!", True, COLOR_WIN)
             status = f"Solved in {self.finish_time:.1f} seconds!"
-            instruction = "Start a fresh puzzle with Reset."
+            instruction = "Your attempt is complete."
         else:
             timer = self.font.render("TIME IS UP!", True, COLOR_FAIL)
             status = f"Tiles moved: {self.moves}"
-            instruction = "Try again and beat the clock."
+            instruction = "Your attempt is complete."
 
         self.screen.blit(timer, timer.get_rect(center=(PANEL_X + 195, PANEL_Y + 435)))
         status_text = self.small_font.render(status, True, COLOR_MUTED)
@@ -521,7 +529,6 @@ class SlidingPuzzle:
             instruction_text,
             instruction_text.get_rect(center=(PANEL_X + 195, PANEL_Y + 500)),
         )
-        self.draw_button(self.reset_button, "RESET PUZZLE", mouse_pos)
 
     def run(self):
         while True:
@@ -553,9 +560,14 @@ class SlidingPuzzle:
                         )
                     elif event.key == pygame.K_RETURN:
                         if self.roll_number.strip() and self.player_name.strip():
-                            self.roll_number = self.roll_number.strip()
-                            self.player_name = self.player_name.strip()
-                            self.game_state = "PREVIEW"
+                            normalized_roll_number = self.roll_number.strip().casefold()
+                            if normalized_roll_number in self.played_roll_numbers:
+                                self.entry_error = "This roll number has already played."
+                            else:
+                                self.roll_number = self.roll_number.strip()
+                                self.player_name = self.player_name.strip()
+                                self.entry_error = ""
+                                self.game_state = "PREVIEW"
                     elif event.key == pygame.K_BACKSPACE:
                         if self.active_field == "roll_number":
                             self.roll_number = self.roll_number[:-1]
@@ -574,9 +586,8 @@ class SlidingPuzzle:
                         self.roll_number = ""
                         self.player_name = ""
                         self.active_field = "roll_number"
+                        self.entry_error = ""
                         self.game_state = "PLAYER_ENTRY"
-                    elif self.game_state == "PLAYING" and self.reset_button.collidepoint(event.pos):
-                        self.start_game()
                     elif self.game_state == "PLAYING" and self.board_rect.collidepoint(event.pos):
                         col = (event.pos[0] - BOARD_X) // TILE_SIZE
                         row = (event.pos[1] - BOARD_Y) // TILE_SIZE

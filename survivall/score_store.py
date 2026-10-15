@@ -35,7 +35,18 @@ def load_scores():
     return scores
 
 
+def has_played(scores, roll_number):
+    normalized_roll_number = roll_number.strip().casefold()
+    return any(
+        score["roll_number"].strip().casefold() == normalized_roll_number
+        for score in scores
+    )
+
+
 def record_score(scores, roll_number, name, seconds, won):
+    if has_played(scores, roll_number):
+        raise ValueError("This roll number has already played.")
+
     updated_scores = [
         *scores,
         {
